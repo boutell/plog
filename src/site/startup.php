@@ -12,6 +12,7 @@ if (isset($_SERVER['HTTP_HOST']))
   $dbname = $_SERVER['HTTP_HOST'];
   $name = $dbname;
   $style = $dbname;
+  $password = $dbname;
 }
 else
 {
@@ -20,11 +21,13 @@ else
   $dbname = $dbinfo['filename'];
   $name = $dbname;
   $style = $dbname;
+  $password = $dbname;
 }
 
 $plog = new Plog(
   array(
     'name' => $name,
+    'password' => $password,
     'style' => $style,
     'database' => array(
       'host' => 'localhost',

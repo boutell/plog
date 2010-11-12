@@ -1,7 +1,13 @@
+Copyright 2010 Thomas Boutell. Released under the MIT license
+Contains code from Apostrophe, copyright 2009 P'unk Avenue, also
+released under the MIT license. Borrows a lot of ideas from Symfony, with appreciation
+
 You can learn more here:
 
 http://www.boutell.com/plog/
 
 Be sure to check out the presentation which should answer your questions about the current state of play and where this is going.
+
+READ THE TODO FILE BEFORE ASKING WHERE THAT FEATURE IS. (:
 
 -Tom (boutell@boutell.com, @tommybgoode)

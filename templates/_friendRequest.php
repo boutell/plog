@@ -14,7 +14,7 @@ Please send the following instructions to your friend via a method you trust&mda
     <code><?php echo $data['code'] ?></code>
   </p>
   <p>
-    <em>"That's nice, but I don't have a plog."</em> I suggest that you get one. Plogs are like regular blogs, but you can restrict your posts to trusted friends as you see fit. They are like Facebook or LiveJournal or Twitter, but your content stays under your own control, and no one company controls all of the plogs in the world. It's a good thing. Visit <a href="http://ploghq.org/">http://ploghq.org/</a> for more information.
+    <em>"That's nice, but I don't have a plog."</em> I suggest that you get one. Plogs are like regular blogs, but you can restrict your posts to trusted friends as you see fit. They are like Facebook or LiveJournal or Twitter, but your content stays under your own control, and no one company controls all of the plogs in the world. It's a good thing. Visit <a href="http://www.boutell.com/plog">http://www.boutell.com/plog</a> for more information.
   </p>
   <p>
     <em>"Can't I just read your RSS feed?"</em> Sure, but my private posts aren't in it. That's because RSS feeds tend to wind up in public services like Google Reader, which is not where I want my private posts to be.

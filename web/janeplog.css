@@ -67,6 +67,11 @@ blockquote
 	padding-right: 10px;
 }
 
+.login
+{
+	float: right;
+}
+
 h1 a
 {
 	color: black;

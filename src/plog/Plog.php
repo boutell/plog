@@ -2,51 +2,37 @@
 
 require dirname(__FILE__) . '/Concise.php';
 
-// THOU SHALT ALWAYS REFER TO GROUPS AS FGROUPS IN THE SOURCE CODE
- 
-// TODO:
-// ? CSRF protection
-// Get a decent name (Plog?)
-// * Implement "accept friend request"
-// Implement friend management (removing friends)
-// ? Posts must be pushed, we can't tickle 500 friends on every page load
-// ? Implement security (owner can post, see private posts, etc. - public only sees public feed)
-// Editing existing posts
-// Pager for public view
-// Plog feed aggregator (where you actually read all this)
-// Pager for private view
-// Tagging of posts
-// Browsing by tag
-// Comments
-// Support reading RSS feeds as well as plog feeds
-// ? RSS feed (outgoing, of public posts only)
-// Browse friends
-// Avatars
-// Other pictures
-// Rich text editing
-// aHtml::simplify filtering of the above
-// "Short" and "full" feed modes (tweetlike titles with "More" buttons vs. full posts)
-// ? Near-realtime features
-// Photo albums
-
-// distblog: distributed social networking, aka blogging with optional privacy
-// Copyright 2010 Thomas Boutell. Released under the MIT license
-// Contains code from Apostrophe, copyright 2009 P'unk Avenue, also
-// released under the MIT license. Borrows a lot of ideas from Symfony
-
 class Plog extends Site
 {
+  protected $loggedIn = false;
+  public function go()
+  {
+    if ($this->getSession('loggedIn'))
+    {
+      $this->loggedIn = true;
+    }
+    parent::go();
+  }
+  
   public function executeIndex()
   {
     $page = min($this->getParam('page', 1), 1);
     $perPage = $this->settings['perPage'];
     // Offset starts at 0 (why did I think it was 1?)
     $offset = ($page - 1) * $perPage;
-    // Remember the id of the newest post we've considered (the newest we've received). This may not be the same thing
-    // as the newest post we choose to show (because publication times don't march in lockstep with IDs)
-    $newestPostId = $this->getNewestPostId();
-    $_SESSION['newest_post_id'] = $newestPostId;
-    $posts = $this->db->query('select p.id, p.title, p.body, p.slug, p.published, f.first_name, f.last_name, f.nickname from post p inner join friend f on p.author_id = f.id order by published desc limit :perPage offset :offset', array('perPage' => $perPage, 'offset' => $offset));
+    if ($this->loggedIn)
+    {
+      // Remember the id of the newest post we've considered (the newest we've received). This may not be the same thing
+      // as the newest post we choose to show (because publication times don't march in lockstep with IDs)
+      $newestPostId = $this->getNewestPostId();
+      $_SESSION['newest_post_id'] = $newestPostId;
+    }
+    $q = 'select p.id, p.title, p.body, p.slug, p.published, a.first_name, a.last_name, a.nickname from post p inner join friend a on p.author_id = a.id ';
+    if (!$this->loggedIn)
+    {
+      $q .= 'inner join post_fgroup pg on p.id = pg.post_id inner join fgroup g on pg.fgroup_id = g.id inner join friend_fgroup fg on g.id = fg.fgroup_id inner join friend f on fg.friend_id = f.id and f.nickname = "_public" ';
+    }
+    $posts = $this->db->query($q . 'order by published desc limit :perPage offset :offset', array('perPage' => $perPage, 'offset' => $offset));
     foreach ($posts as &$post)
     {
       $post['url'] = $this->urlToPost($post);
@@ -117,6 +103,8 @@ class Plog extends Site
         $privacy = $this->getParam('publicity');
         if ($privacy === 'public')
         {
+          $friends_fgroup_id = $this->db->queryOneScalar('SELECT id FROM fgroup WHERE name = "_friends"');
+          $fgroup_ids[] = $friends_fgroup_id;
           $public_fgroup_id = $this->db->queryOneScalar('SELECT id FROM fgroup WHERE name = "_public"');
           $fgroup_ids[] = $public_fgroup_id;
         }
@@ -317,7 +305,7 @@ class Plog extends Site
   {
     // 100 posts is pretty much standard for an RSS feed - more than that
     // and the major aggregators start rejecting your feed.
-    $posts = $this->db->query('select * from post p inner join post_fgroup pg on p.id = pg.post_id inner join fgroup g on pg.fgroup_id = g.id inner join friend f on pg.friend_id = f.id and f.name = "_public" order by published desc limit :rssFeedMax', array('rssFeedMax' => 100));
+    $posts = $this->db->query('select * from post p inner join post_fgroup pg on p.id = pg.post_id inner join fgroup g on pg.fgroup_id = g.id inner join friend_fgroup fg on g.id = fg.fgroup_id inner join friend f on fg.friend_id = f.id and f.name = "_public" order by published desc limit :rssFeedMax', array('rssFeedMax' => 100));
     foreach ($posts as $post)
     {
       $post['url'] = $this->urlToPost($post);
@@ -488,6 +476,34 @@ class Plog extends Site
     $this->template('show', array('post' => $post, 'homeUrl' => $this->urlTo('index')));
   }
 
+  public function executeLogin()
+  {
+    $csrf = $this->csrfNext();
+    $this->template('login', array('actionUrl' => $this->urlTo('loginSubmit'), 'cancelUrl' => $this->urlTo('index'), 'csrf' => $csrf));
+  }
+  
+  public function executeLoginSubmit()
+  {
+    $this->csrfCheck();
+    $password = trim($this->requireParam('password'));
+    if ($password !== $this->settings['password'])
+    {
+      $this->errors['password']['incorrect'] = true;
+    }
+    if (count($this->errors))
+    {
+      return $this->executeLogin();
+    }
+    $this->setSession('loggedIn', true);
+    $this->redirectTo('index');
+  }
+  
+  public function executeLogout()
+  {
+    $this->setSession('loggedIn', false);
+    return $this->redirectTo('index');
+  }
+  
   public function recreateDatabase()
   {
     $settings = $this->settings['database'];
@@ -543,7 +559,7 @@ class Plog extends Site
 
   protected function layout($output)
   {    
-    $t = new Template('layout', array('content' => $output, 'postUrl' => $this->urlTo('post'), 'addFriendUrl' => $this->urlTo('addFriend'), 'indexUrl' => $this->urlTo('index'), 'acceptFriendRequestUrl' => $this->urlTo('acceptFriendRequest'), 'action' => $this->action, 'delivering' => $this->countPendingDeliveries(), 'deliverUrl' => $this->urlTo('deliver'), 'unread' => $this->countUnread(), 'unreadUrl' => $this->urlTo('unread'), 'name' => $this->settings['name'], 'style' => $this->settings['style']));
+    $t = new Template('layout', array('content' => $output, 'postUrl' => $this->urlTo('post'), 'addFriendUrl' => $this->urlTo('addFriend'), 'indexUrl' => $this->urlTo('index'), 'acceptFriendRequestUrl' => $this->urlTo('acceptFriendRequest'), 'action' => $this->action, 'delivering' => $this->countPendingDeliveries(), 'deliverUrl' => $this->urlTo('deliver'), 'unread' => $this->countUnread(), 'unreadUrl' => $this->urlTo('unread'), 'name' => $this->settings['name'], 'style' => $this->settings['style'], 'loggedIn' => $this->loggedIn, 'loginUrl' => $this->urlTo('login'), 'logoutUrl' => $this->urlTo('logout')));
     $t->go();
   }
   

@@ -259,6 +259,23 @@ class Site
     return $_SERVER['SCRIPT_NAME'];
   }
   
+  protected function getSession($p, $d = null)
+  {
+    if (isset($_SESSION[$p]))
+    {
+      return $_SESSION[$p];
+    }
+    else
+    {
+      return $d;
+    }
+  }
+  
+  protected function setSession($p, $v)
+  {
+    $_SESSION[$p] = $v;
+  }
+  
   protected function requireParam($p)
   {
     if ((!isset($_REQUEST[$p])) || (!strlen(trim($_REQUEST[$p]))))
