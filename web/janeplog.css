@@ -1,0 +1,225 @@
+/* Meyer reset css */
+
+/* v1.0 | 20080212 */
+
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, font, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	outline: 0;
+	font-size: 100%;
+	vertical-align: baseline;
+	background: transparent;
+}
+body {
+	line-height: 1;
+}
+ol, ul {
+	list-style: none;
+}
+blockquote, q {
+	quotes: none;
+}
+blockquote:before, blockquote:after,
+q:before, q:after {
+	content: '';
+	content: none;
+}
+
+/* remember to define focus styles! */
+:focus {
+	outline: 0;
+}
+
+/* remember to highlight inserts somehow! */
+ins {
+	text-decoration: none;
+}
+del {
+	text-decoration: line-through;
+}
+
+/* tables still need 'cellspacing="0"' in the markup */
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+
+/* My CSS */
+
+body
+{
+	font-family: Helvetica;
+	line-height: 150%;
+}
+
+blockquote
+{
+	padding-left: 10px;
+	padding-right: 10px;
+}
+
+h1 a
+{
+	color: black;
+	text-decoration: none;
+}
+
+p
+{
+	padding-bottom: 10px;
+}
+
+li
+{
+	padding-bottom: 10px;
+}
+
+input.submit
+{
+	font-size: 80%;
+	background-color: #dfd;
+	border: 1px solid #8a8;
+}
+
+li.title input
+{
+	width: 300px;
+}
+
+textarea
+{
+	width: 500px;
+	height: 300px;
+}
+
+a.cancel
+{
+	color: #800;
+	text-decoration: none;
+	background-color: 1px solid #fdd;
+	padding-left: 10px;
+	font-size: 80%;
+}
+
+input.submit:hover
+{
+	background-color: #efe;
+}
+
+.container
+{
+	width: 960px;
+	margin: auto;
+}
+
+.radio
+{
+	padding-top: 5px;
+}
+
+.header
+{
+	padding-top: 20px;
+	padding-bottom: 60px;
+}
+
+h1
+{
+	font-size: 300%;
+	padding-bottom: 20px;
+}
+
+h2
+{
+	font-size: 200%;
+	padding-bottom: 15px;
+}
+
+form li label,input,select
+{
+	float: left;
+}
+
+form li label
+{
+	width: 150px;
+}
+
+form li
+{
+	clear: left;
+	padding-top: 10px;
+}
+
+.tabs li
+{
+	float: left;
+	padding: 5px 10px 5px 10px;
+	background-color: #ddf;
+}
+
+.tabs li.current
+{
+	background-color: #fff;
+}
+
+.tabs li a
+{
+	text-decoration: none;
+	color: black;
+}
+
+.counters
+{
+	background-color: #ddf;
+	padding: 5px 10px 5px 10px;
+	height: 24px;
+	float: right;
+}
+
+.counters li
+{
+	float: left;
+	padding-right: 10px;
+}
+
+.clearfix
+{
+	clear: both;
+}
+	
+.a-remove
+{
+	color: #dd8888;
+	font-style: italic;
+	padding-left: 5px;
+	text-decoration: none;
+}
+
+.index-posts
+{
+	list-style: none;
+}
+
+.index-posts .post
+{
+	list-style: none;
+}
+
+.index-posts .post li
+{
+}
+
+.index-posts .title
+{
+	font-size: 200%;
+}
