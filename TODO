@@ -1,0 +1,34 @@
+THOU SHALT ALWAYS REFER TO GROUPS AS FGROUPS IN THE SOURCE CODE
+
+*: already done. ?: not really tested yet. Otherwise: not done.
+
+TODO:
+
+* CSRF protection
+
+? Get a decent name (Plog?)
+
+* Implement "accept friend request"
+Implement friend management (removing friends, adding to friend groups)
+
+* Push posts to friends (working for "all friends" posts)
+
+Implement security (owner can post, see private posts, etc. - public only sees public feed) - partially done. Right now the site itself is not yet secured with a login, since I've been pushing to get a demo done. There will be a separate public home page for partially public plogs
+
+Editing existing posts
+Public view, with pagination, for public posts
+Support reading RSS feeds as well as plog feeds
+Pagination for feed reader
+Tagging of posts
+Browsing by tag
+Comments (friends only)
+Comments (public, some kind of akismet integration)
+* RSS feed (outgoing, of public posts only)
+Avatars
+Other pictures
+Rich text editing
+Filtering of the above (might use aHtml::simplify from Apostrophe so your "friends" can't phish you)
+"Short" and "full" feed modes (tweetlike titles with "More" buttons vs. full posts)
+* Near-realtime delivery
+Photo albums
+
