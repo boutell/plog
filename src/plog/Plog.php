@@ -47,11 +47,35 @@ class Plog extends Site
     return $this->urlTo('show', array('year' => $year, 'month' => $month, 'day' => $day, 'slug' => $post['slug']));
   }
   
+  public function executeFriends()
+  {
+    $this->requireLogin();
+    $friends = $this->db->query('SELECT * from friend WHERE friend.type = "plog" AND validated = 1 ORDER BY nickname ASC');
+    $csrf = $this->getCsrf();
+    foreach ($friends as &$friend)
+    {
+      $friend['deleteUrl'] = $this->urlTo('delete', array('id' => $friend['id'], 'csrf' => $csrf));
+    }
+  }
+  
+  public function executeDeleteFriend()
+  {
+    $this->requireLogin();
+    $this->checkCsrf();
+    $id = $this->requireParam('id');
+    if (!count($this->errors))
+    {
+      $friend = $this->db->query('SELECT * from friend where id = :id', array('id' => $id));
+    }
+  }
+  
   public function executePostSubmit()
   {
+    $this->requireLogin();
+    
     if ($this->getServer('REQUEST_METHOD') === 'POST')
     {
-      $csrfGood = $this->csrfCheck();
+      $csrfGood = $this->checkCsrf();
       $post['title'] = $this->requireParam('title');
       $post['body'] = $this->requireParam('body');
       $specific_fgroup_ids = $this->getParam('fgroups');
@@ -150,7 +174,9 @@ class Plog extends Site
   
   public function executePost()
   {
-    $csrf = $this->csrfNext();
+    $this->requireLogin();
+    
+    $csrf = $this->getCsrf();
     $title = $this->getParam('title', '');
     $body = $this->getParam('body', '');
     $fgroups = $this->getParam('fgroups', array());
@@ -167,7 +193,9 @@ class Plog extends Site
 
   public function executeAddFriend()
   {
-    $info['csrf'] = $this->csrfNext();
+    $this->requireLogin();
+    
+    $info['csrf'] = $this->getCsrf();
     $info['first_name'] = $this->getParam('first_name', '');
     $info['last_name'] = $this->getParam('last_name', '');
     $info['nickname'] = $this->getParam('nickname', '');
@@ -178,9 +206,11 @@ class Plog extends Site
       
   public function executeAddFriendSubmit()
   {
+    $this->requireLogin();
+    
     if ($this->getServer('REQUEST_METHOD') === 'POST')
     {
-      $this->csrfCheck();
+      $this->checkCsrf();
       $first_name = $this->getParam('first_name', '');
       $last_name = $this->getParam('last_name', '');
       $nickname = $this->requireParam('nickname');
@@ -302,10 +332,10 @@ class Plog extends Site
   // Public RSS feed
   
   public function executeRssFeed()
-  {
+  {    
     // 100 posts is pretty much standard for an RSS feed - more than that
     // and the major aggregators start rejecting your feed.
-    $posts = $this->db->query('select * from post p inner join post_fgroup pg on p.id = pg.post_id inner join fgroup g on pg.fgroup_id = g.id inner join friend_fgroup fg on g.id = fg.fgroup_id inner join friend f on fg.friend_id = f.id and f.name = "_public" order by published desc limit :rssFeedMax', array('rssFeedMax' => 100));
+    $posts = $this->db->query('select * from post p ' . $this->getJoinForPublic() . 'order by published desc limit :rssFeedMax', array('rssFeedMax' => 100));
     foreach ($posts as $post)
     {
       $post['url'] = $this->urlToPost($post);
@@ -321,6 +351,8 @@ class Plog extends Site
   
   public function executeDeliver()
   {
+    $this->requireLogin();
+    
     $this->hasLayout = false;
     $delivered = 0;
     $total = $this->countPendingDeliveries();
@@ -366,25 +398,31 @@ class Plog extends Site
   
   public function executeUnread()
   {
+    $this->requireLogin();
+    
     $this->hasLayout = false;
     echo(json_encode(array('unread' => $this->countUnread())));
   }
     
   public function executeAcceptFriendRequest()
   {
+    $this->requireLogin();
+    
     $data['code'] = $this->getParam('code');
     $data['first_name'] = $this->getParam('first_name');
     $data['last_name'] = $this->getParam('last_name');
     $data['nickname'] = $this->getParam('nickname');
     $data['actionUrl'] = $this->urlTo('acceptFriendRequestSubmit');
     $data['cancelUrl'] = $this->urlTo('index');
-    $data['csrf'] = $this->csrfNext();
+    $data['csrf'] = $this->getCsrf();
     $this->template('acceptFriendRequest', $data);
   }
 
   public function executeAcceptFriendRequestSubmit()
   {
-    $this->csrfCheck();
+    $this->requireLogin();
+    
+    $this->checkCsrf();
     $code = $this->requireParam('code');
     $first_name = $this->requireParam('first_name');
     $last_name = $this->requireParam('last_name');
@@ -472,19 +510,29 @@ class Plog extends Site
   
   public function executeShow()
   {
-    $post = $this->db->queryOne('SELECT * FROM post WHERE slug = :slug', array('slug' => $this->getParam('slug')));
+    $q = 'SELECT * FROM post p ';
+    if (!$this->loggedIn)
+    {
+      $q .= $this->getJoinForPublic();
+    }
+    $q .= 'WHERE p.slug = :slug ';
+    $post = $this->db->queryOne($q, array('slug' => $this->getParam('slug')));
+    if (!$post)
+    {
+      return $this->redirectTo('index');
+    }
     $this->template('show', array('post' => $post, 'homeUrl' => $this->urlTo('index')));
   }
 
   public function executeLogin()
   {
-    $csrf = $this->csrfNext();
+    $csrf = $this->getCsrf();
     $this->template('login', array('actionUrl' => $this->urlTo('loginSubmit'), 'cancelUrl' => $this->urlTo('index'), 'csrf' => $csrf));
   }
   
   public function executeLoginSubmit()
   {
-    $this->csrfCheck();
+    $this->checkCsrf();
     $password = trim($this->requireParam('password'));
     if ($password !== $this->settings['password'])
     {
@@ -500,6 +548,7 @@ class Plog extends Site
   
   public function executeLogout()
   {
+    $this->requireLogin();
     $this->setSession('loggedIn', false);
     return $this->redirectTo('index');
   }
@@ -589,4 +638,18 @@ class Plog extends Site
   {
     return $this->db->queryOneScalar('select count(*) FROM post_friend_pending pfp INNER JOIN post p ON p.id = pfp.post_id INNER JOIN friend f on f.id = pfp.friend_id');
   }
+  
+  protected function requireLogin()
+  {
+    if (!$this->loggedIn)
+    {
+      return $this->redirectTo('index');
+    }
+  }
+  
+  protected function getJoinForPublic()
+  {
+    return 'inner join post_fgroup pg on p.id = pg.post_id inner join fgroup g on pg.fgroup_id = g.id inner join friend_fgroup fg on g.id = fg.fgroup_id inner join friend f on fg.friend_id = f.id and f.nickname = "_public" ';
+  }
 }
+

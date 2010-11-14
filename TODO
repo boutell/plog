@@ -19,14 +19,15 @@ Editing existing posts
 Public view, with pagination, for public posts
 Support reading RSS feeds as well as plog feeds
 Pagination for feed reader
-Tagging of posts
-Browsing by tag
+Rich text editing
+Address i18n issues (the slugifier is too harsh)
 Comments (friends only)
 Comments (public, some kind of akismet integration)
 * RSS feed (outgoing, of public posts only)
 Avatars
 Other pictures
-Rich text editing
+Tagging of posts
+Browsing by tag
 Filtering of the above (might use aHtml::simplify from Apostrophe so your "friends" can't phish you)
 "Short" and "full" feed modes (tweetlike titles with "More" buttons vs. full posts)
 * Near-realtime delivery

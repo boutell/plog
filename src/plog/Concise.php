@@ -387,26 +387,31 @@ class Site
     return $response;
   }
   
-  public function csrfNext()
+  // Simple CSRF protection. The session has a CSRF key in it, end of story.
+  // (Don't confuse CSRF with protection against sniffing, which only https
+  // can truly deliver... but stay away from open networks and you're in
+  // pretty good shape in practice)
+
+  public function getCsrf()
   {
-    $csrf = Guid::generate();
-    $_SESSION['csrf'][$csrf] = true;
-    return $csrf;
+    if (!isset($_SESSION['csrf']))
+    {
+      $_SESSION['csrf'] = Guid::generate();
+    }
+    return $_SESSION['csrf'];
   }
 
-  public function csrfCheck($value = null)
+  public function checkCsrf($value = null)
   {
     if ($value === null)
     {
       $value = $this->getParam('csrf');
     }
-    $result = isset($_SESSION['csrf'][$value]);
-    if (!$result)
+    if (!isset($_SESSION['csrf']))
     {
-      $this->errors['csrf']['required'] = true;
       return false;
     }
-    return true;
+    return ($_SESSION['csrf'] === $value);
   }
 }
 
@@ -795,26 +800,6 @@ class Mysql
     {
     }
     return (isset($data[0]['Field']));
-  }
-
-  // Handy if you have p.title, p.body, etc. and you just want title, body, etc.
-  public function getPrefixed($results, $prefix)
-  {
-    $nresults = array();
-    foreach ($results as $result)
-    {
-      $values = array();
-      foreach ($result as $key => $val)
-      {
-        $len = strlen($prefix);
-        if (substr($key, 0, $len) === $prefix)
-        {
-          $values[substr($key, $len)] = $val;
-        }
-      }
-      $nvalues[] = $values;
-    }
-    return $nvalues;
   }
   
   // Return a value that will be unique for the column (assuming no race condition of course;
