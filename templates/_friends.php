@@ -2,7 +2,7 @@
   <?php foreach ($data['friends'] as $friend): ?>
     <li class="friend">
       <ul>
-        <li class="name"><?php echo $friend['firstName'] . ' ' . $friend['lastName' ] . ' (' . $friend['nickname'] . ')' ?></li>
+        <li class="name"><?php echo $friend['first_name'] . ' ' . $friend['last_name' ] . ' (' . $friend['nickname'] . ')' ?></li>
         <li class="actions"><a class="delete" href="<?php echo $friend['deleteUrl'] ?>">Delete</a></li>
       </ul>
     </li>

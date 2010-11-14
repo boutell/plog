@@ -27,10 +27,11 @@
           </li>
         </ul>
         <ul class="tabs">
-          <li class="<?php echo ($data['action'] === 'index') ? "current" : "" ?>"><a href="<?php echo $data['indexUrl'] ?>">Home</a></li>
-          <li class="<?php echo ($data['action'] === 'post') ? "current" : "" ?>"><a href="<?php echo $data['postUrl'] ?>">Post</a></li>
-          <li class="<?php echo preg_match('/^addFriend/', $data['action']) ? "current" : "" ?>"><a href="<?php echo $data['addFriendUrl'] ?>">Add Friend</a></li>
-          <li class="<?php echo ($data['action'] === 'acceptFriendRequest') ? "current" : "" ?>"><a href="<?php echo $data['acceptFriendRequestUrl'] ?>">Accept Friend Request</a></li>
+          <?php echo $this->tab('index', 'indexUrl', 'Home') ?>
+          <?php echo $this->tab('post', 'postUrl', 'Post') ?>
+          <?php echo $this->tab('/friends/', 'friendsUrl', 'Friends') ?>
+          <?php echo $this->tab('/^addFriend/', 'addFriendUrl', 'Add Friend') ?>
+          <?php echo $this->tab('/^acceptFriendRequest/', 'acceptFriendRequestUrl', 'Accept Friend Request') ?>
         </ul>
         <script type="text/javascript" charset="utf-8">
           // Deliver new plog posts to appropriate friends

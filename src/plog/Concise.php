@@ -276,6 +276,11 @@ class Site
     $_SESSION[$p] = $v;
   }
   
+  protected function clearSession()
+  {
+    session_unset();
+  }
+  
   protected function requireParam($p)
   {
     if ((!isset($_REQUEST[$p])) || (!strlen(trim($_REQUEST[$p]))))
@@ -520,6 +525,30 @@ class Template
     return $this->tag('select', array('id' => $id, 'multiple' => 1, 'size' => 1, 'name' => $name), $o) . $this->tag('label', array('for' => $id), $label);
   }
   
+  // Outputs an li containing a link if the current action is equal to or matches $actionOrRegexp (if it starts
+  // with a / it is treated as a regexp). $urlField indicates what field in $this->data contains the URL.
+  // Looking it up this way avoids forcing the template author to call $this->getDirty yet also avoids
+  // blindly outputting the URL
+  public function tab($actionOrRegexp, $urlField, $label)
+  {
+    $class = '';
+    if (substr($actionOrRegexp, 0, 1) === '/')
+    {
+      if (preg_match($actionOrRegexp, $this->data['action']))
+      {
+        $class = 'current';
+      }
+    }
+    else
+    {
+      if ($actionOrRegexp === $this->data['action'])
+      {
+        $class = 'current';
+      }
+    }
+    return $this->tag('li', array('class' => $class), $this->tag('a', array('href' => $this->data[$urlField]), $label));
+  }
+  
   public function tag($name, $attributes, $content = null)
   {
     $t = '<' . $name;
@@ -747,9 +776,19 @@ class Mysql
   public function update($table, $id, $params = array())
   {
     $q = 'UPDATE ' . $table . ' ';
+    $first = true;
     foreach ($params as $k => $v)
     {
-      $q .= 'SET ' . $k . ' = :' . $k . ' ';
+      if ($first)
+      {
+        $q .= 'SET ';
+        $first = false;
+      }
+      else
+      {
+        $q .= ', ';
+      }
+      $q .= $k . ' = :' . $k . ' ';
     }
     $q .= 'WHERE id = :id';
     return $this->query($q, $params);

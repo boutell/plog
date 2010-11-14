@@ -228,3 +228,14 @@ form li
 {
 	font-size: 200%;
 }
+
+.friends li li
+{
+	float: left;
+	padding-right: 10px;
+}
+
+.friends li ul
+{
+	clear: left;
+}

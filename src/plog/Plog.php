@@ -54,8 +54,9 @@ class Plog extends Site
     $csrf = $this->getCsrf();
     foreach ($friends as &$friend)
     {
-      $friend['deleteUrl'] = $this->urlTo('delete', array('id' => $friend['id'], 'csrf' => $csrf));
+      $friend['deleteUrl'] = $this->urlTo('deleteFriend', array('id' => $friend['id'], 'csrf' => $csrf));
     }
+    return $this->template('friends', array('friends' => $friends));
   }
   
   public function executeDeleteFriend()
@@ -65,8 +66,9 @@ class Plog extends Site
     $id = $this->requireParam('id');
     if (!count($this->errors))
     {
-      $friend = $this->db->query('SELECT * from friend where id = :id', array('id' => $id));
+      $this->db->delete('friend', $id);
     }
+    return $this->redirectTo('friends');
   }
   
   public function executePostSubmit()
@@ -239,17 +241,26 @@ class Plog extends Site
           $info = array('first_name' => $first_name, 'last_name' => $last_name, 'nickname' => $nickname, 'validated' => 0, 'secret' => Guid::generate(), 'type' => 'plog', 'validate' => ':' . Guid::generate());
         }
         
-        // A new friend can immediately see messages intended for all friends
-        $friend_id = $this->db->insert('friend', $info);
-        $this->addFriendToFriends($friend_id);
+        if ($existing)
+        {
+          $this->db->update('friend', $info['id'], $info);
+        }
+        else
+        {
+          $friend_id = $this->db->insert('friend', $info);
+          // A new friend can immediately see messages intended for all friends
+          $this->addFriendToFriends($friend_id);
+        }
 
-        // If it looks like a URL people will try to browse to it. So base64 encode it. Nothing to do with security - they need
-        // to get this information to the other person safely by the means of their choice.
+        // base64-encoded so people understand it's opaque, json_encoded so it's extensible. Of course base64 is not secure.
+        // The user needs to get this information to the other person safely by the means of their choice.
         
         // The information the other site needs is our base URL, their one-time validation code (until we know *their* URL), 
-        // and the shared secret
+        // and the shared secret. We also pass our first name, last name and nickname as defaults the other person can edit
+        // if they wish to (or there is a duplicate nickname)
         
-        $info['code'] = base64_encode(implode(',', array($this->absolute($this->getRoot()), $info['validate'], $info['secret'])));
+        $info['code'] = base64_encode(json_encode(array('first_name' => $this->settings['first_name'], 'last_name' => $this->settings['last_name'], 'nickname' => $this->settings['nickname'], 'url' => $this->absolute($this->getRoot()), 'validate' => $info['validate'], 'secret' => $info['secret'])));
+
         return $this->template('friendRequest', $info);
       }
     }
@@ -407,41 +418,75 @@ class Plog extends Site
   public function executeAcceptFriendRequest()
   {
     $this->requireLogin();
-    
+
     $data['code'] = $this->getParam('code');
-    $data['first_name'] = $this->getParam('first_name');
-    $data['last_name'] = $this->getParam('last_name');
-    $data['nickname'] = $this->getParam('nickname');
-    $data['actionUrl'] = $this->urlTo('acceptFriendRequestSubmit');
-    $data['cancelUrl'] = $this->urlTo('index');
     $data['csrf'] = $this->getCsrf();
+    $data['actionUrl'] = $this->urlTo('acceptFriendRequestSubmit');
     $this->template('acceptFriendRequest', $data);
   }
 
   public function executeAcceptFriendRequestSubmit()
   {
     $this->requireLogin();
-    
+    $info = $this->unpackFriendRequestCode($this->getParam('code'));
     $this->checkCsrf();
-    $code = $this->requireParam('code');
-    $first_name = $this->requireParam('first_name');
-    $last_name = $this->requireParam('last_name');
-    $nickname = $this->uniqueParam('nickname', 'friend');
-    $code = trim($code);
-    if (strlen($code))
+    if (is_null($info))
     {
-      $code = base64_decode($code);
-      if (strpos($code, ',') === false)
-      {
-        $this->errors['code']['invalid'] = true;
-      }
+      $this->errors['code']['required'] = true;
     }
     if (count($this->errors))
     {
       return $this->executeAcceptFriendRequest();
     }
+    $this->setParam('first_name', $info['first_name']);
+    $this->setParam('last_name', $info['last_name']);
+    $this->setParam('nickname', $info['nickname']);
+    return $this->executeAcceptFriendRequest2();
+  }
+
+  public function executeAcceptFriendRequest2()
+  {
+    $this->requireLogin();
+    $this->checkCsrf();
+    $data['csrf'] = $this->getCsrf();
+    $data['first_name'] = $this->getParam('first_name');
+    $data['last_name'] = $this->getParam('last_name');
+    $data['nickname'] = $this->getParam('nickname');
+    $data['code'] = $this->getParam('code');
+    $data['actionUrl'] = $this->urlTo('acceptFriendRequest2Submit');
+    $this->template('acceptFriendRequest2', $data);
+  }
+
+  protected function unpackFriendRequestCode($code)
+  {
+    // Ignores non-base64 characters. Some versions of PHP
+    // don't manage this on their own
+    $code = preg_replace('|[^A-Za-z0-9\+/]|', '', $code);
+    $code = base64_decode($code);
+    $info = json_decode($code, true);
+    return $info;
+  }
+  
+  public function executeAcceptFriendRequest2Submit()
+  {
+    $this->requireLogin();
+    $this->checkCsrf();
+    $info = $this->unpackFriendRequestCode($this->requireParam('code'));
+    $first_name = $this->requireParam('first_name');
+    $last_name = $this->requireParam('last_name');
+    $nickname = $this->uniqueParam('nickname', 'friend');
+    if (is_null($info))
+    {
+      $this->errors['code']['invalid'] = true;
+    }
+    if (count($this->errors))
+    {
+      return $this->executeAcceptFriendRequest2();
+    }
     
-    list($url, $validate, $secret) = preg_split('/,/', $code);
+    $url = $info['url'];
+    $validate = $info['validate'];
+    $secret = $info['secret'];
 
     $response = $this->call($url, $secret, 'acceptFriendRequest', array('url' => $this->absolute($this->getRoot())), $validate);
     if (is_null($response))
@@ -549,7 +594,7 @@ class Plog extends Site
   public function executeLogout()
   {
     $this->requireLogin();
-    $this->setSession('loggedIn', false);
+    $this->clearSession();
     return $this->redirectTo('index');
   }
   
@@ -608,7 +653,7 @@ class Plog extends Site
 
   protected function layout($output)
   {    
-    $t = new Template('layout', array('content' => $output, 'postUrl' => $this->urlTo('post'), 'addFriendUrl' => $this->urlTo('addFriend'), 'indexUrl' => $this->urlTo('index'), 'acceptFriendRequestUrl' => $this->urlTo('acceptFriendRequest'), 'action' => $this->action, 'delivering' => $this->countPendingDeliveries(), 'deliverUrl' => $this->urlTo('deliver'), 'unread' => $this->countUnread(), 'unreadUrl' => $this->urlTo('unread'), 'name' => $this->settings['name'], 'style' => $this->settings['style'], 'loggedIn' => $this->loggedIn, 'loginUrl' => $this->urlTo('login'), 'logoutUrl' => $this->urlTo('logout')));
+    $t = new Template('layout', array('content' => $output, 'postUrl' => $this->urlTo('post'), 'addFriendUrl' => $this->urlTo('addFriend'), 'indexUrl' => $this->urlTo('index'), 'acceptFriendRequestUrl' => $this->urlTo('acceptFriendRequest'), 'friendsUrl' => $this->urlTo('friends'), 'action' => $this->action, 'delivering' => $this->countPendingDeliveries(), 'deliverUrl' => $this->urlTo('deliver'), 'unread' => $this->countUnread(), 'unreadUrl' => $this->urlTo('unread'), 'name' => $this->settings['name'], 'style' => $this->settings['style'], 'loggedIn' => $this->loggedIn, 'loginUrl' => $this->urlTo('login'), 'logoutUrl' => $this->urlTo('logout')));
     $t->go();
   }
   

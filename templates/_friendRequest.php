@@ -8,11 +8,9 @@ Please send the following instructions to your friend via a method you trust&mda
 </p>
 <blockquote>
   <p>
-    Hi <?php echo $data['nickname'] ?>, I'm inviting you to access restricted updates on my plog. To do that, <strong>log into your own plog and click "Accept Friend Request,"</strong> then paste the code below:
+    Hi <?php echo $data['nickname'] ?>, I'm inviting you to access restricted updates on my plog. To do that, <strong>log into your own plog and click "Accept Friend Request,"</strong> then copy and paste the code below:
   </p>
-  <p>
-    <code><?php echo $data['code'] ?></code>
-  </p>
+  <pre><?php echo wordwrap($data['code'], 40, "\n", true) ?></pre>
   <p>
     <em>"That's nice, but I don't have a plog."</em> I suggest that you get one. Plogs are like regular blogs, but you can restrict your posts to trusted friends as you see fit. They are like Facebook or LiveJournal or Twitter, but your content stays under your own control, and no one company controls all of the plogs in the world. It's a good thing. Visit <a href="http://www.boutell.com/plog">http://www.boutell.com/plog</a> for more information.
   </p>
