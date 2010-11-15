@@ -1,19 +1,15 @@
 THOU SHALT ALWAYS REFER TO GROUPS AS FGROUPS IN THE SOURCE CODE
+THOU SHALT ALWAYS END SQL FRAGMENTS WITH A SPACE WHEN YOU INTEND TO ASSEMBLE THEM INTO ONE QUERY
+THOU SHALT USE $this->getCsrf() AND $this->checkCsrf() AND $this->requireLogin() AS APPROPRIATE
 
 *: already done. ?: not really tested yet. Otherwise: not done.
 
 TODO:
 
-* CSRF protection
-
 ? Get a decent name (Plog?)
 
-* Implement "accept friend request"
-Implement friend management (removing friends, adding to friend groups)
 
-* Push posts to friends (working for "all friends" posts)
-
-Implement security (owner can post, see private posts, etc. - public only sees public feed) - partially done. Right now the site itself is not yet secured with a login, since I've been pushing to get a demo done. There will be a separate public home page for partially public plogs
+Implement friend group editing & managing of membership in groups
 
 Editing existing posts
 Public view, with pagination, for public posts
@@ -23,13 +19,43 @@ Rich text editing
 Address i18n issues (the slugifier is too harsh)
 Comments (friends only)
 Comments (public, some kind of akismet integration)
-* RSS feed (outgoing, of public posts only)
 Avatars
 Other pictures
 Tagging of posts
 Browsing by tag
 Filtering of the above (might use aHtml::simplify from Apostrophe so your "friends" can't phish you)
 "Short" and "full" feed modes (tweetlike titles with "More" buttons vs. full posts)
-* Near-realtime delivery
 Photo albums
+Custom stylesheets should be loaded in addition to main.css, not in place of it. Overrides are more maintainable
 
+* CSRF protection
+* Near-realtime delivery
+* Implement "accept friend request"
+* Implement removing friends
+* Push posts to friends as appropriate
+* Implement security (owner can post, see private posts, etc. - public only sees public feed)
+* RSS feed (outgoing, of public posts only)
+
+NOTES
+
+Comments are a pretty problem.
+
+If Joe posts, and Jane and Jill are friends with Joe but not with each other, how do they see each other's comments (assuming that is what Jane intends when she comments)?
+
+We could say that comments are sent by the commenter to all mutual friends only, via established secrets. But this precludes a major means of discovering the plogs of friends. Realistically it will be very hard for everyone to connect exclusively outside of plogspace. And conversations are very incoherent this way, with Joe making reference to Jane's comments Jill can't see.
+
+Joe could rebroadcast comments. This is effective, but there is no way for Jane to verify that Jill really said something.
+
+One approach: Jane md5's Jill's comment, including path information (the URL of Joe's plog, the slug of Joe's post, the URL of Jane's plog) and the content of the post. Jane then queries Jill's plog: "hey, did you really say this?" Jill's plog keeps the md5 of each comment made, so it is able to verify or deny. However a "no" result only tells Jane that *somebody* is full of shit. Her friend Joe could be bull of shit, or Jill's plog could be lying about the verification result. 
+
+Jane has little reason to trust Jill (whose identity is uncertain) over Joe (already confirmed as a plog friend), so she's going to shrug and say "WTF?"
+
+Plog comments could be signed with public/private key encryption, but this doesn't do us much good unless we are already friends with the parties involved (a useful case to be sure...) or there is some central certificate authority. The latter is something we are trying hard to avoid.
+
+When we are friends with Joe we trust the veracity of what he says on his own behalf. Why would we not trust the veracity of what he claims others have said? He could just as easily quote something they supposedly said to him on the phone. It comes down to the real-friend relationship. If we trust Joe, we trust Joe. If we don't, we unfriend him. This problem always exists when commenting on somebody's public blog (it's not a new problem for Wordpress for instance although it does not exist in the context of LJ or Facebook in the same way).
+
+There should probably be a short note to the effect that "as with any blog, the authenticity of comments can't be guaranteed. If you trust Joe, then you may trust these comments to be genuine to the best of Joe's knowledge" (ugh, that should probably pop up if you actually click a "security note" button).
+
+So comments should be sent to the original poster (OP), and rebroadcast by the OP as appropriate. If they are not anonymous then the possibility of contacting the third party directly and establishing a friendship exists. There should be some kind of "heya, this is so and so, my plog is here, you could call me to confirm" functionality. Not that Facebook confirms anybody's identity either (Twitter has the option). Nor does LiveJournal. 
+
+It has always been possible to generate fakity-fake friends. You work through friends you trust. You do not build huge webs of secrets betweeh people you don't know.
