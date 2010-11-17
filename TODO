@@ -1,6 +1,7 @@
 THOU SHALT ALWAYS REFER TO GROUPS AS FGROUPS IN THE SOURCE CODE
 THOU SHALT ALWAYS END SQL FRAGMENTS WITH A SPACE WHEN YOU INTEND TO ASSEMBLE THEM INTO ONE QUERY
 THOU SHALT USE $this->getCsrf() AND $this->checkCsrf() AND $this->requireLogin() AS APPROPRIATE
+THOU SHALT MAKE SURE p.deleted = 0 BEFORE SHOWING A POST
 
 *: already done. ?: not really tested yet. Otherwise: not done.
 
@@ -8,13 +9,9 @@ TODO:
 
 ? Get a decent name (Plog?)
 
-
 Implement friend group editing & managing of membership in groups
-
-Editing existing posts
-Public view, with pagination, for public posts
+Pagination for reader (public and private)
 Support reading RSS feeds as well as plog feeds
-Pagination for feed reader
 Rich text editing
 Address i18n issues (the slugifier is too harsh)
 Comments (friends only)
@@ -28,6 +25,11 @@ Filtering of the above (might use aHtml::simplify from Apostrophe so your "frien
 Photo albums
 Custom stylesheets should be loaded in addition to main.css, not in place of it. Overrides are more maintainable
 
+* Implement editing existing posts
+* Test your fix for restoring the privacy setting on edit
+* Implement preserving the original slug on edit
+* Test the logic that updates and deletes remotely
+* Also, throw in 'delete post' since it's free once that stuff works 
 * CSRF protection
 * Near-realtime delivery
 * Implement "accept friend request"
@@ -58,4 +60,7 @@ There should probably be a short note to the effect that "as with any blog, the 
 
 So comments should be sent to the original poster (OP), and rebroadcast by the OP as appropriate. If they are not anonymous then the possibility of contacting the third party directly and establishing a friendship exists. There should be some kind of "heya, this is so and so, my plog is here, you could call me to confirm" functionality. Not that Facebook confirms anybody's identity either (Twitter has the option). Nor does LiveJournal. 
 
-It has always been possible to generate fakity-fake friends. You work through friends you trust. You do not build huge webs of secrets betweeh people you don't know.
+It has always been possible to generate fakity-fake friends. You work through friends you trust. You do not build huge webs of secrets between people you don't know.
+
+It's a good idea to use direct delivery for comments by mutual friends, however the performance issues are kind of grim. To be exhaustively sure you'd have to query all of your mutual friends about every post you look at, and you can't even see Joe's friendslist (something to think about). Basing this on trust in the OP is probably the only way forward without a CA.
+

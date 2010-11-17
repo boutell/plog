@@ -2,7 +2,11 @@
   <?php foreach ($data['posts'] as $post): ?>
     <li>
       <ul class="post">
-        <li class="title"><a href="<?php echo $post['url'] ?>"><?php echo $post['title'] ?></a></li>
+        <li class="title"><a href="<?php echo $post['url'] ?>"><?php echo $post['title'] ?></a>
+          <?php if (isset($post['editUrl'])): ?>
+            <a class="edit" href="<?php echo $post['editUrl'] ?>">Edit</a>
+          <?php endif ?>
+        </li>
         <li class="masthead">
           <?php $when = strtotime($post['published']) ?>
           <?php echo date('F jS, Y', strtotime($post['published'])) ?> by 

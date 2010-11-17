@@ -229,6 +229,11 @@ form li
 	font-size: 200%;
 }
 
+.title .edit
+{
+	font-size: 50%;
+}
+
 .friends li li
 {
 	float: left;

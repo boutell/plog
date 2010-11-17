@@ -27,15 +27,19 @@ class Plog extends Site
       $newestPostId = $this->getNewestPostId();
       $_SESSION['newest_post_id'] = $newestPostId;
     }
-    $q = 'select p.id, p.title, p.body, p.slug, p.published, a.first_name, a.last_name, a.nickname from post p inner join friend a on p.author_id = a.id ';
+    $q = 'select p.id, p.title, p.body, p.slug, p.published, p.remote_id, a.first_name, a.last_name, a.nickname from post p inner join friend a on p.author_id = a.id ';
     if (!$this->loggedIn)
     {
       $q .= 'inner join post_fgroup pg on p.id = pg.post_id inner join fgroup g on pg.fgroup_id = g.id inner join friend_fgroup fg on g.id = fg.fgroup_id inner join friend f on fg.friend_id = f.id and f.nickname = "_public" ';
     }
-    $posts = $this->db->query($q . 'order by published desc limit :perPage offset :offset', array('perPage' => $perPage, 'offset' => $offset));
+    $posts = $this->db->query($q . ' WHERE p.deleted = 0 order by published desc limit :perPage offset :offset', array('perPage' => $perPage, 'offset' => $offset));
     foreach ($posts as &$post)
     {
       $post['url'] = $this->urlToPost($post);
+      if ($this->loggedIn && is_null($post['remote_id']))
+      {
+        $post['editUrl'] = $this->urlTo('edit', array('id' => $post['id']));
+      }
     }
     return $this->template('index', array('posts' => $posts, 'postUrl' => $this->urlTo('post')));
   }
@@ -44,7 +48,16 @@ class Plog extends Site
   {
     list($date, $time) = preg_split('/ /', $post['published']);
     list($year, $month, $day) = preg_split('/-/', $date);
-    return $this->urlTo('show', array('year' => $year, 'month' => $month, 'day' => $day, 'slug' => $post['slug']));
+    $p = array('year' => $year, 'month' => $month, 'day' => $day);
+    if (!is_null($post['slug']))
+    {
+      $p['slug'] = $post['slug'];
+    }
+    else
+    {
+      $p['id'] = $post['id'];
+    }
+    return $this->urlTo('show', $p);
   }
   
   public function executeFriends()
@@ -80,6 +93,13 @@ class Plog extends Site
       $csrfGood = $this->checkCsrf();
       $post['title'] = $this->requireParam('title');
       $post['body'] = $this->requireParam('body');
+      $id = $this->getParam('id', null);
+      if ($id && (!$this->db->exists('post', $id)))
+      {
+        // Trying to edit a post that has been deleted or never existed,
+        // pretty fishy, just bounce them
+        return $this->redirectTo('index');
+      }
       $specific_fgroup_ids = $this->getParam('fgroups');
       if (!is_array($specific_fgroup_ids))
       {
@@ -118,15 +138,40 @@ class Plog extends Site
       $this->setParam('fgroups', $specific_fgroup_ids);
       if (!count($this->errors))
       {
-        $post['slug'] = $this->db->uniqueify('post', 'slug', $this->slugify($post['title']));
+        // Friends who have already seen the previous version, if any.
+        // If they are not supposed to see the new version, we need to send
+        // them a delete request
+        $old_friend_ids = array();
         $post['published'] = $this->db->now();
         $me_id = $this->db->queryOneScalar('SELECT id FROM friend WHERE nickname = "_me"');
         $post['author_id'] = $me_id;
-        $post_id = $this->db->insert('post', $post);
+        $privacy = $this->getParam('publicity');
+        if ($privacy === 'public')
+        {
+          $post['slug'] = $this->db->uniqueify('post', 'slug', $this->slugify($post['title']), $id);
+        }
+        else
+        {
+          // Very specifically set to null, in case we're updating a formerly public post
+          $post['slug'] = null;
+        }
+        if ($id)
+        {
+          $old_friend_ids = $this->getFriendIdsForPost($id);
+          
+          $this->db->update('post', $id, $post);
+          // We're about to refresh these
+          $this->db->query('DELETE FROM post_friend_pending WHERE post_id = :post_id', array('post_id' => $id));
+          $this->db->query('DELETE FROM post_fgroup WHERE post_id = :post_id', array('post_id' => $id));
+          $post_id = $id;
+        }
+        else
+        {
+          $post_id = $this->db->insert('post', $post);
+        }
         $fgroup_ids = array();
         $me_fgroup_id = $this->db->queryOneScalar('SELECT id FROM fgroup WHERE name = "_me"');
         $fgroup_ids[] = $me_fgroup_id;
-        $privacy = $this->getParam('publicity');
         if ($privacy === 'public')
         {
           $friends_fgroup_id = $this->db->queryOneScalar('SELECT id FROM fgroup WHERE name = "_friends"');
@@ -154,26 +199,98 @@ class Plog extends Site
         {
           $this->db->insert('post_fgroup', array('post_id' => $post_id, 'fgroup_id' => $fgroup_id));
         }
-        $friend_ids = $this->db->queryScalar('SELECT f.id FROM friend_fgroup fg INNER JOIN friend f ON f.id = fg.friend_id WHERE f.validated = 1 AND f.type = "plog" AND fg.fgroup_id IN :fgroup_ids', array('fgroup_ids' => $fgroup_ids));
-        $this->addDeliveries(array($post_id), $friend_ids);
+        $friend_ids = $this->getFriendIdsForPost($post_id);
+        $this->addDeliveries(array($post_id), $friend_ids, $old_friend_ids);
         return $this->redirectTo('index');
       }
     }
     return $this->executePost();
   }
 
-  protected function addDeliveries($post_ids, $friend_ids)
+  protected function getFriendIdsForPost($id)
   {
-    $now = $this->db->now();
+    return $this->db->queryScalar('SELECT fg.friend_id FROM friend_fgroup fg INNER JOIN post_fgroup pf ON fg.fgroup_id = pf.fgroup_id INNER JOIN post p ON p.id = pf.post_id AND p.id = :post_id INNER JOIN friend f ON f.id = fg.friend_id WHERE f.validated = 1 AND f.type = "plog"', array('post_id' => $id));
+  }
+  
+  protected function addDeliveries($post_ids, $friend_ids, $old_friend_ids = array())
+  {
     foreach ($post_ids as $post_id)
     {
+      $old_map = array_flip($old_friend_ids);
+      $new_map = array_flip($friend_ids);
+      foreach ($old_friend_ids as $old_friend_id)
+      {
+        if (!isset($new_map[$old_friend_id]))
+        {
+          $this->addDelivery($post_id, $old_friend_id, 'delete');
+        }
+      }
       foreach ($friend_ids as $friend_id)
       {
-        $this->db->insert('post_friend_pending', array('post_id' => $post_id, 'friend_id' => $friend_id, 'next_attempt' => $now, 'created_at' => $now));
+        $status = 'create';
+        if (isset($old_map[$friend_id]))
+        {
+          $status = 'update';
+        }
+        $this->addDelivery($post_id, $friend_id, $status);
       }
     }
   }
+
+  protected function addDelivery($post_id, $friend_id, $status = 'create')
+  {
+    $now = $this->db->now();
+    $this->db->insert('post_friend_pending', array('post_id' => $post_id, 'friend_id' => $friend_id, 'status' => $status, 'next_attempt' => $now, 'created_at' => $now));
+  }
   
+  public function executeEdit()
+  {
+    $this->requireLogin();
+    $id = (int) $this->getParam('id');
+    // Don't require CSRF as it would stick in the URL and they haven't 
+    // actually done anything yet
+    $post = $this->db->find('post', $id);
+    if (!$post)
+    {
+      // Naughty naughty, or just a fluke thing with two tabs open, whatever
+      return $this->redirectTo('index');
+    }
+    if (!is_null($post['remote_id']))
+    {
+      // Can't edit somebody else's post, it's just a copy for you to read locally anyway
+      return $this->redirectTo('index');
+    }
+    $fgroups = $this->db->query('SELECT fg.id, fg.name FROM fgroup fg INNER JOIN post_fgroup pf ON fg.id = pf.fgroup_id AND pf.post_id = :id', array('id' => $id));
+    $this->setParam('title', $post['title']);
+    $this->setParam('body', $post['body']);
+    // Reconstruct the publicity setting from the fgroups
+    $publicity = 'private';
+    foreach ($fgroups as $fgroup)
+    {
+      if ($fgroup['name'] === '_me')
+      {
+        // No change
+      }
+      elseif ($fgroup['name'] === '_public')
+      {
+        $publicity = 'public';
+        break;
+      }
+      elseif ($fgroup['name'] === '_friends')
+      {
+        $publicity = 'friends';
+      }
+      else
+      {
+        $publicity = 'some';
+      }
+    }
+    $this->setParam('publicity', $publicity);
+    $this->setParam('fgroups', $this->db->getIds($fgroups));
+    return $this->executePost();
+  }
+  
+  // Write a new post or edit an old one
   public function executePost()
   {
     $this->requireLogin();
@@ -181,18 +298,38 @@ class Plog extends Site
     $csrf = $this->getCsrf();
     $title = $this->getParam('title', '');
     $body = $this->getParam('body', '');
+    $id = $this->getParam('id', '');
+    $publicity = $this->getParam('publicity', 'private');
     $fgroups = $this->getParam('fgroups', array());
-    // TODO: think about a way to refresh the new friends fgroups (fgroups_add) if
-    // validation fails. aMultipleSelect currently can't do that
     $fgroupInfos = $this->db->query('select id, name from fgroup where type = "regular"');
     $fgroupOptions = array();
     foreach ($fgroupInfos as $info)
     {
       $fgroupOptions[$info['id']] = $info['name'];
     }
-    return $this->template('post', array('csrf' => $csrf, 'title' => $title, 'body' => $body, 'actionUrl' => $this->urlTo('postSubmit'), 'cancelUrl' => $this->urlTo('index'), 'publicity' => 'public', 'fgroups' => $fgroups, 'fgroupOptions' => $fgroupOptions));
+    $data = array('csrf' => $csrf, 'id' => $id, 'title' => $title, 'body' => $body, 'publicity' => $publicity, 'actionUrl' => $this->urlTo('postSubmit'), 'cancelUrl' => $this->urlTo('index'), 'publicity' => $publicity, 'fgroups' => $fgroups, 'fgroupOptions' => $fgroupOptions);
+    if ($data['id'])
+    {
+      $data['deleteUrl'] = $this->urlTo('delete', array('id' => $data['id'], 'csrf' => $this->getCsrf()));
+    }
+    return $this->template('post', $data);
   }
-
+  
+  public function executeDelete()
+  {
+    $this->requireLogin();
+    $this->checkCsrf();
+    $id = (int) $this->getParam('id');
+    if (!count($this->errors))
+    {
+      // Cancel deliveries in progress, add 'delete' deliveries, set the deleted flag
+      $this->db->query('DELETE FROM post_friend_pending WHERE post_id = :post_id', array('post_id' => $id));
+      $this->addDeliveries(array($id), array(), $this->getFriendIdsForPost($id));
+      $this->db->update('post', $id, array('deleted' => 1, 'title' => null, 'body' => null));
+    }
+    return $this->redirectTo('index');
+  }
+  
   public function executeAddFriend()
   {
     $this->requireLogin();
@@ -294,17 +431,40 @@ class Plog extends Site
   public function apiRemotePost()
   {
     // TODO: length limits, and aHtml::simplify for body (at a minimum we can't let phishing attacks through)
+    $author_id = $this->getRemoteFriendId();
+    $status = $this->requireParam('status');
+    if ($status === 'delete')
+    {
+      $remote_id = $this->requireParam('id');
+      if (count($this->errors))
+      {
+        return array('status' => 'error', 'errors' => $this->errors);
+      }
+      // They asked us nicely to pretend this post never happened. We're not jerks,
+      // so we'll do that
+      $this->db->query('DELETE FROM post WHERE remote_id = :remote_id AND author_id = :author_id', array('author_id' => $author_id, 'remote_id' => $remote_id));
+      return array('status' => 'ok');
+    }
     $data['title'] = $this->requireParam('title');
     $data['body'] = $this->getParam('body');
     $data['published'] = $this->requireParam('published');
-    $data['slug'] = $this->db->uniqueify('post', 'slug', $this->slugify($data['title']));
+    $data['remote_id'] = $this->getParam('id');
     if (count($this->errors))
     {
       return array('status' => 'error', 'errors' => $this->errors);
     }
-    $friend_id = $this->getRemoteFriendId();
-    $data['author_id'] = $friend_id;
-    $this->db->insert('post', $data);
+    // There are separate 'update' and 'add' statuses sent over, but it doesn't really matter -
+    // if it's new to us we add it, if it's not new we update it
+    $data['author_id'] = $author_id;
+    $existing = $this->db->queryOneScalar('SELECT id FROM post WHERE author_id = :author_id AND remote_id = :remote_id', $data);
+    if ($existing)
+    {
+      $this->db->update('post', $existing, $data);
+    }
+    else
+    {
+      $this->db->insert('post', $data);
+    }
     return array('status' => 'ok');
   }
 
@@ -335,7 +495,7 @@ class Plog extends Site
   protected function sendPostsToNewFriend($friend_id)
   {
     // Send them recent posts they are allowed to see
-     $post_ids = $this->db->queryScalar('SELECT p.id FROM post p INNER JOIN friend author ON author.nickname = "_me" AND p.author_id = author.id INNER JOIN post_fgroup pg ON pg.post_id = p.id INNER JOIN friend_fgroup fg ON fg.fgroup_id = pg.fgroup_id AND fg.friend_id = :friend_id ORDER BY published desc LIMIT :limit', array('limit' => $this->settings['postsToNewFriend'], 'friend_id' => $friend_id));
+     $post_ids = $this->db->queryScalar('SELECT p.id FROM post p INNER JOIN friend author ON author.nickname = "_me" AND p.author_id = author.id INNER JOIN post_fgroup pg ON pg.post_id = p.id INNER JOIN friend_fgroup fg ON fg.fgroup_id = pg.fgroup_id AND fg.friend_id = :friend_id WHERE p.deleted = 0 ORDER BY published desc LIMIT :limit', array('limit' => $this->settings['postsToNewFriend'], 'friend_id' => $friend_id));
     $this->addDeliveries($post_ids, array($friend_id));
     return array('status' => 'ok');
   }
@@ -346,7 +506,7 @@ class Plog extends Site
   {    
     // 100 posts is pretty much standard for an RSS feed - more than that
     // and the major aggregators start rejecting your feed.
-    $posts = $this->db->query('select * from post p ' . $this->getJoinForPublic() . 'order by published desc limit :rssFeedMax', array('rssFeedMax' => 100));
+    $posts = $this->db->query('select * from post p ' . $this->getJoinForPublic() . ' WHERE p.deleted = 0 order by published desc limit :rssFeedMax', array('rssFeedMax' => 100));
     foreach ($posts as $post)
     {
       $post['url'] = $this->urlToPost($post);
@@ -367,11 +527,18 @@ class Plog extends Site
     $this->hasLayout = false;
     $delivered = 0;
     $total = $this->countPendingDeliveries();
-    $deliveries = $this->db->query('select * FROM post_friend_pending pfp INNER JOIN post p ON p.id = pfp.post_id INNER JOIN friend f on f.id = pfp.friend_id WHERE next_attempt <= NOW() ORDER BY next_attempt ASC LIMIT :limit', array('limit' => $this->settings['deliveriesPerAttempt']));
+    $deliveries = $this->db->query('select p.title, p.body, p.published, pfp.status, pfp.friend_id, pfp.post_id, pfp.attempts, f.secret, f.url FROM post_friend_pending pfp INNER JOIN post p ON p.id = pfp.post_id INNER JOIN friend f on f.id = pfp.friend_id WHERE next_attempt <= NOW() ORDER BY next_attempt ASC LIMIT :limit', array('limit' => $this->settings['deliveriesPerAttempt']));
     foreach ($deliveries as $delivery)
     {
       $delete = false;
-      $data = array('title' => $delivery['title'], 'body' => $delivery['body'], 'published' => $delivery['published']);
+      $data = array('status' => $delivery['status']);
+      if ($data['status'] !== 'delete')
+      {
+        $data['title'] = $delivery['title'];
+        $data['body'] = $delivery['body'];
+        $data['published'] = $delivery['published'];
+      }
+      $data['id'] = $delivery['post_id'];
       $response = $this->call($delivery['url'], $delivery['secret'], 'remotePost', $data);
       if (is_array($response) && $response['status'] === 'ok')
       {
@@ -422,6 +589,7 @@ class Plog extends Site
     $data['code'] = $this->getParam('code');
     $data['csrf'] = $this->getCsrf();
     $data['actionUrl'] = $this->urlTo('acceptFriendRequestSubmit');
+    $data['cancelUrl'] = $this->urlTo('index');
     $this->template('acceptFriendRequest', $data);
   }
 
@@ -454,6 +622,7 @@ class Plog extends Site
     $data['nickname'] = $this->getParam('nickname');
     $data['code'] = $this->getParam('code');
     $data['actionUrl'] = $this->urlTo('acceptFriendRequest2Submit');
+    $data['cancelUrl'] = $this->urlTo('index');
     $this->template('acceptFriendRequest2', $data);
   }
 
@@ -541,14 +710,26 @@ class Plog extends Site
   
   public function routeShow(&$path, &$params)
   {
-    $path .= '/' . $this->consume($params, 'year') . '/' . $this->consume($params, 'month') . '/' . $this->consume($params, 'day') . '/' . $this->consume($params, 'slug');
+    if (isset($params['slug']))
+    {
+      $path .= '/' . $this->consume($params, 'year') . '/' . $this->consume($params, 'month') . '/' . $this->consume($params, 'day') . '/' . $this->consume($params, 'slug');
+    }
+    else
+    {
+      $path .= '/' . $this->consume($params, 'year') . '/' . $this->consume($params, 'month') . '/' . $this->consume($params, 'day') . '/' . $this->consume($params, 'id');
+    }
   }
   
   public function parseShow($path)
   {
-    if (preg_match('|^/(\d+)/(\d+)/(\d+)/([\w\-]+)$|', $path, $matches))
+    // TODO: this is very Western-only
+    if (preg_match('|^/(\d+)/(\d+)/(\d+)/([a-zA-Z][\w\-]*)$|', $path, $matches))
     {
       return array('year' => $matches[1], 'month' => $matches[2], 'day' => $matches[3], 'slug' => $matches[4]);
+    }
+    elseif (preg_match('|^/(\d+)/(\d+)/(\d+)/(\d+)$|', $path, $matches))
+    {
+      return array('year' => $matches[1], 'month' => $matches[2], 'day' => $matches[3], 'id' => $matches[4]);
     }
     return $this->notFound();
   }
@@ -560,13 +741,31 @@ class Plog extends Site
     {
       $q .= $this->getJoinForPublic();
     }
-    $q .= 'WHERE p.slug = :slug ';
-    $post = $this->db->queryOne($q, array('slug' => $this->getParam('slug')));
+    $q .= 'WHERE deleted = 0 ';
+    $p = array();
+    if ($this->hasParam('slug'))
+    {
+      $q .= 'AND slug = :slug';
+      $p['slug'] = $this->getParam('slug');
+    }
+    else
+    {
+      $q .= 'AND id = :id';
+      $p['id'] = $this->getParam('id');
+    }
+    $post = $this->db->queryOne($q, $p);
     if (!$post)
     {
       return $this->redirectTo('index');
     }
-    $this->template('show', array('post' => $post, 'homeUrl' => $this->urlTo('index')));
+    $data = array('post' => $post, 'homeUrl' => $this->urlTo('index'));
+    
+    if ($this->loggedIn && is_null($post['remote_id']))
+    {
+      $data['editUrl'] = $this->urlTo('edit', array('id' => $post['id']));
+    }
+    
+    $this->template('show', $data);
   }
 
   public function executeLogin()
@@ -621,8 +820,8 @@ class Plog extends Site
   {
     $sql = array(
       'create table friend (id BIGINT AUTO_INCREMENT, first_name varchar(100), last_name varchar(100), nickname varchar(100), url varchar(255), secret varchar(100), validate varchar(100), type varchar(20), validated tinyint default 0, UNIQUE INDEX url_idx(url), UNIQUE INDEX nickname_idx(nickname), PRIMARY KEY (id)) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
-      'create table post (id BIGINT AUTO_INCREMENT, author_id BIGINT NOT NULL, url varchar(1000), title varchar(140), slug varchar(140), body text, published datetime, INDEX published_idx (published), UNIQUE INDEX slug_idx(slug), PRIMARY KEY(id), INDEX author_id_idx(author_id), CONSTRAINT post_friend_author_id FOREIGN KEY (author_id) REFERENCES friend (id) ON DELETE CASCADE) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
-      'create table post_friend_pending (post_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, created_at DATETIME, next_attempt DATETIME, attempts INT default 0, PRIMARY KEY (post_id, friend_id), CONSTRAINT post_friend_delivered_fgroup_post_id FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE, CONSTRAINT post_friend_delivered_friend_id FOREIGN KEY (friend_id) REFERENCES friend (id) ON DELETE CASCADE) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
+      'create table post (id BIGINT AUTO_INCREMENT, remote_id BIGINT, deleted tinyint default 0, author_id BIGINT NOT NULL, url varchar(1000), title varchar(140), slug varchar(140), body text, published datetime, INDEX published_idx (published), INDEX slug_idx(slug), INDEX author_id_and_remote_id_idx(author_id, remote_id), PRIMARY KEY(id), INDEX author_id_idx(author_id), CONSTRAINT post_friend_author_id FOREIGN KEY (author_id) REFERENCES friend (id) ON DELETE CASCADE) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
+      'create table post_friend_pending (post_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, status varchar(20), created_at DATETIME, next_attempt DATETIME, attempts INT default 0, PRIMARY KEY (post_id, friend_id), CONSTRAINT post_friend_delivered_fgroup_post_id FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE, CONSTRAINT post_friend_delivered_friend_id FOREIGN KEY (friend_id) REFERENCES friend (id) ON DELETE CASCADE) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
       'create table fgroup (id BIGINT AUTO_INCREMENT, name varchar(100), type varchar(20), UNIQUE INDEX name_idx(name), PRIMARY KEY (id)) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
       'create table post_fgroup (post_id BIGINT NOT NULL, fgroup_id BIGINT NOT NULL, PRIMARY KEY(post_id, fgroup_id), CONSTRAINT post_fgroup_post_id FOREIGN KEY (post_id) REFERENCES post (id) ON DELETE CASCADE, CONSTRAINT post_fgroup_fgroup_id FOREIGN KEY (fgroup_id) REFERENCES fgroup (id) ON DELETE CASCADE) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
       'create table friend_fgroup (friend_id BIGINT NOT NULL, fgroup_id BIGINT NOT NULL, PRIMARY KEY(friend_id, fgroup_id), CONSTRAINT friend_fgroup_friend_id FOREIGN KEY (friend_id) REFERENCES friend (id) ON DELETE CASCADE, CONSTRAINT friend_fgroup_fgroup_id FOREIGN KEY (fgroup_id) REFERENCES fgroup (id) ON DELETE CASCADE) DEFAULT CHARACTER SET UTF8 ENGINE = INNODB',
@@ -688,7 +887,7 @@ class Plog extends Site
   {
     if (!$this->loggedIn)
     {
-      return $this->redirectTo('index');
+      $this->redirectTo('index');
     }
   }
   

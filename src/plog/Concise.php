@@ -68,7 +68,6 @@ class Site
           }
           else
           {
-            $this->notFound();
             throw new ParseException();
           }
         }
@@ -80,7 +79,6 @@ class Site
         }
         else
         {
-          $this->notFound();
           throw new ParseException();
         }
       }
@@ -89,9 +87,19 @@ class Site
         $this->action = 'index';
         $method = 'executeIndex';
       }
-      $this->$method();
+      try
+      {
+        $this->$method();
+      } catch (RedirectException $re)
+      {
+        // This catch makes it easier to implement
+        // the most typical solution to exceptional
+        // situations - redirecting the user somewhere
+        // else
+      }
     } catch (ParseException $pe)
     {
+      $this->notFound();
     }
     $output = ob_get_clean();
     if ($this->hasLayout)
@@ -234,6 +242,7 @@ class Site
     $this->hasLayout = false;
     $path = $this->absolute($this->urlTo($action));
     header("Location: " . $path . "\r\n\r\n");
+    throw new RedirectException();
   }
 
   protected function consume(&$array, $key)
@@ -320,6 +329,11 @@ class Site
     return isset($this->params[$p]) ? $this->params[$p] : $d;
   }
 
+  protected function hasParam($p)
+  {
+    return isset($this->params[$p]);
+  }
+  
   protected function setParam($p, $v)
   {
     $this->params[$p] = $v;
@@ -509,7 +523,7 @@ class Template
   public function radio($label, $name, $value)
   {
     $id = Id::next();
-    return $this->tag('input', array('id' => $id, 'type' => 'radio', 'name' => $name, 'value' => $value, 'checked' => ($this->data['publicity'] === $value) ? 'checked' : null)) . $this->tag('label', array('for' => $id), $label);
+    return $this->tag('input', array('id' => $id, 'type' => 'radio', 'name' => $name, 'value' => $value, 'checked' => ($this->data[$name] === $value) ? 'checked' : null)) . $this->tag('label', array('for' => $id), $label);
   }
   
   // This takes advantage of a nice progressively enhanced multiple select borrowed from Apostrophe
@@ -578,6 +592,13 @@ class Id
   {
     return 'p_auto_id' . self::$n++;
   }
+}
+
+// Thrown on calls to redirectTo() so you don't have to check for
+// a lot of tedious booleans when implementing something like requireLogin().
+// Caught by go()
+class RedirectException extends Exception
+{
 }
 
 // A simple, safe, awesome wrapper for MySQL. Offers useful tools
@@ -772,11 +793,23 @@ class Mysql
     $this->query('DELETE FROM ' . $table . ' WHERE id = :id', array('id' => $id));
   }
 
+  // Good for fetching a row when there is an 'id' column
+  public function find($table, $id)
+  {
+    return $this->queryOne('SELECT * from ' . $table . ' WHERE id = :id', array('id' => $id));
+  }
+  
+  public function exists($table, $id)
+  {
+    return !!$this->find($table, $id);
+  }
+  
   // Good for updating a record with a simple id column
   public function update($table, $id, $params = array())
   {
     $q = 'UPDATE ' . $table . ' ';
     $first = true;
+    $params['id'] = $id;
     foreach ($params as $k => $v)
     {
       if ($first)
@@ -845,11 +878,11 @@ class Mysql
   // you should still use UNIQUE INDEX). If the input passes slugify, the output will too.
   // Trusts table and column (you would never let users enter metadata like that, right?)
   
-  public function uniqueify($table, $column, $value)
+  public function uniqueify($table, $column, $value, $exceptId = null)
   {
     $cvalue = $value;
     $n = 1;
-    while (!$this->unique($table, $column, $cvalue))
+    while (!$this->unique($table, $column, $cvalue, $exceptId))
     {
       $n++;
       // Compatible with slugify
@@ -858,14 +891,31 @@ class Mysql
     return $cvalue;
   }
 
-  // Just check for uniqueness
-  public function unique($table, $column, $value)
+  // Just check for uniqueness. When you are updating an existing row it is
+  // convenient to pass the id of the existing row so keeping the value the same
+  // is not considered a conflict
+  public function unique($table, $column, $value, $exceptId = null)
   {
-    if (count($this->query('select * from ' . $table . ' where ' . $column . ' = :value', array('value' => $value))))
+    $q = 'select * from ' . $table . ' where ' . $column . ' = :value ';
+    if (!is_null($exceptId))
+    {
+      $q .= 'AND id <> :except_id';
+    }
+    if (count($this->query($q, array('value' => $value, 'except_id' => $exceptId))))
     {
       return false;
     }
     return true;
+  }
+  
+  public function getIds($results)
+  {
+    $ids = array();
+    foreach ($results as $result)
+    {
+      $ids[] = $result['id'];
+    }
+    return $ids;
   }
 }
 
