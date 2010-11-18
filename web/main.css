@@ -149,17 +149,17 @@ h2
 	padding-bottom: 15px;
 }
 
-form li label,input,select
+form li.row label,input,select
 {
 	float: left;
 }
 
-form li label
+form li.row label
 {
 	width: 150px;
 }
 
-form li
+form li.row
 {
 	clear: left;
 	padding-top: 10px;
@@ -244,3 +244,4 @@ form li
 {
 	clear: left;
 }
+

@@ -1,6 +1,7 @@
 <?php
 
 require dirname(__FILE__) . '/Concise.php';
+require dirname(__FILE__) . '/HtmlSimplify.php';
 
 class Plog extends Site
 {
@@ -92,7 +93,8 @@ class Plog extends Site
     {
       $csrfGood = $this->checkCsrf();
       $post['title'] = $this->requireParam('title');
-      $post['body'] = $this->requireParam('body');
+      $simplify = new HtmlSimplify();
+      $post['body'] = $simplify->simplify($this->requireParam('body'));
       $id = $this->getParam('id', null);
       if ($id && (!$this->db->exists('post', $id)))
       {
@@ -446,7 +448,9 @@ class Plog extends Site
       return array('status' => 'ok');
     }
     $data['title'] = $this->requireParam('title');
-    $data['body'] = $this->getParam('body');
+    // Remote post HTML needs to be filtered to prevent XSS attacks and other nonsense
+    $simplify = new HtmlSimplify();
+    $data['body'] = $simplify->simplify($this->getParam('body'));
     $data['published'] = $this->requireParam('published');
     $data['remote_id'] = $this->getParam('id');
     if (count($this->errors))

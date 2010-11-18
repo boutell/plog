@@ -1,6 +1,12 @@
-Copyright 2010 Thomas Boutell. Released under the MIT license
+Copyright 2010 Thomas Boutell. Released under the MIT license.
+
 Contains code from Apostrophe, copyright 2009 P'unk Avenue, also
-released under the MIT license. Borrows a lot of ideas from Symfony, with appreciation
+released under the MIT license. 
+
+Contains jWysiwyg, Copyright (c) 2009 Juan M Martínez, also released under
+the MIT license.
+
+Borrows a lot of ideas from Symfony, with appreciation.
 
 You can learn more here:
 

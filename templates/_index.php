@@ -16,7 +16,10 @@
             <?php echo $post['first_name'] ?> <?php echo $post['last_name'] ?> (<?php echo $post['nickname'] ?>)
           <?php endif ?>
         </li>
-        <li class="body"><?php echo $post['body'] ?></li>
+        <?php // Posts are prefiltered HTML, so in this one instance ?>
+        <?php // we undo the escaping that occurs when data is passed ?>
+        <?php // to a template ?>
+        <li class="body"><?php echo html_entity_decode($post['body']) ?></li>
       </ul>
     </li>
   <?php endforeach ?>

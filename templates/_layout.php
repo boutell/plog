@@ -1,10 +1,12 @@
 <html>
 <head>
 <title>my plog</title>
-<script src="/jquery-1.4.2.min.js"></script>
-<script src="/aControls.js"></script>
 <link href="/reset.css" rel="stylesheet" type="text/css" /> 
 <link href="/<?php echo $data['style'] ?>.css" rel="stylesheet" type="text/css" /> 
+<link href="/jquery.wysiwyg.css" rel="stylesheet" type="text/css" />
+<script src="/jquery-1.4.2.min.js"></script>
+<script src="/jquery.wysiwyg.js"></script>
+<script src="/aControls.js"></script>
 </head>
 <body>
   <div class="container">
