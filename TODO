@@ -66,3 +66,30 @@ It has always been possible to generate fakity-fake friends. You work through fr
 
 It's a good idea to use direct delivery for comments by mutual friends, however the performance issues are kind of grim. To be exhaustively sure you'd have to query all of your mutual friends about every post you look at, and you can't even see Joe's friendslist (something to think about). Basing this on trust in the OP is probably the only way forward without a CA.
 
+* * *
+
+A better way:
+
+The OP (Original Poster) writes a post.
+
+A clicks for comments (apiGetComments) and receives two things from the OP:
+
+1. A "comment secret" (CS) for the post;
+2. A list of "comments," in chronological order but not containing the actual text. Instead a "comment" is just a plog address and a remote ID for that comment.
+
+A then calls out to the commenters' plogs to pull the comments from them in real time (there has to be pagination obviously). A pulls comments from B, C and D using the CS to authenticate instead of a shared secret. A sends the comment remote ID.
+
+apiGetComments would support pagination directly for simplicity.
+
+Benefits:
+
+The OP cannot forge comments (they can reorder or remove them, but that's all).
+
+B, C and D don't have to send the same comment text to A and E, which is bad. However, since the CS is being used rather than a shared secret, B, C and D cannot distinguish for certain between A and E. So it is not safe to say one thing to Peter and another thing to Paul. That means it is unlikely this will be exploited. (In practice one could sometimes make this determination by static IP address, but IP addresses are shared often enough to make that a risky practice.) Anyway there are easier ways to be two-faced (just privately contact both people and say different things).
+
+If the OP changes post security, a new CS must be distributed. Comments made by those lacking the necessary privileges would effectively vanish at this point. I think that's acceptable.
+
+There is still a question of knowing that comments exist. It probably makes sense to do an asynchronous apiGetComments when displaying a post that has comments. That could be locally cached for a little while.
+
+When you post a comment you are just creating a post of your own that specifies another post (as its parent). <-- or do we simplify comments, avoid nesting, and not allow them to be fully rich monstrosities? I like simple comments better because they discourage overuse of the comment system - plogging doesn't work as well if it digresses infinitely into comment threads. Better to make a new post if you have something big to say.
+
